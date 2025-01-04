@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# No weather data
+utils/
+data/weather
+
 # Distribution / packaging
 .Python
 build/
