@@ -1,4 +1,4 @@
-from data.DataPreparing import DataPreparing
+from processing.DataPreparing import DataPreparing
 import lightgbm as lgb
 import pandas as pd
 import numpy as np
@@ -9,16 +9,27 @@ from typing import Tuple, Dict, List
 
 
 class LightGBM_Model:
+    """Class to train a LightGBM model for each quantile and return the models.
+
+    Attributes:
+        None
+
+    Functions:
+        lightgbm_model: Train a LightGBM model for each quantile and return the models.
+        lightgbm_model_iterative: Train a LightGBM model for each quantile and return the models. This is iterative approach.    
+    """
     def lightgbm_model(
         self,
         data: pd.DataFrame,
-        FEATURES: dict[float, list[str]],
+        features: dict[float, list[str]],
         TARGET: str,
         learning_rate: dict[float, float],
         num_estimators: dict[float, float],
         num_leaves: dict[float, float],
         reg_alpha: dict[float, float],
         quantiles: list[float],
+        n_splits: int,
+        test_size: int,
     ) -> tuple[dict[str, lgb.LGBMRegressor], dict[str, float]]:
         """Train a LightGBM model for each quantile and return the models.
 
@@ -32,7 +43,7 @@ class LightGBM_Model:
 
         data_preparer = DataPreparing()
 
-        tss = TimeSeriesSplit(n_splits=5, test_size=7, gap=0)
+        tss = TimeSeriesSplit(n_splits=n_splits, test_size=test_size, gap=0)
 
         models = {}
         predictions = {}
@@ -52,16 +63,17 @@ class LightGBM_Model:
 
             split_counter = 0
             for train_index, test_index in tss.split(data):
+
+                data = data_preparer.create_features_iterative(data, TARGET) # Create features for the data
+
                 train = data.iloc[train_index]
                 test = data.iloc[test_index]
 
-                train = data_preparer.create_features(train)
-                test = data_preparer.create_features(test)
 
-                X_train = train[FEATURES[quantile]]
+                X_train = train[features[quantile]]
                 y_train = train[TARGET]
 
-                X_test = test[FEATURES[quantile]]
+                X_test = test[features[quantile]]
                 y_test = test[TARGET]
 
                 models[f"model_{quantile}"] = lgb.LGBMRegressor(
@@ -117,9 +129,7 @@ class LightGBM_Model:
             results[f"quantile_{quantile} Relative Pinball Loss Mean"] = np.mean(
                 relative_pinnball_loss_each_quantile
             )
-            print(
-                f"Quantile {quantile} Relative Pinball Loss: {np.mean(relative_pinnball_loss_each_split)}"
-            )
+
 
             # Compute the mean d2 pinball score for each quantile
             d2_pinball_score_each_quantile.append(np.mean(d2_pinball_score_each_split))
@@ -144,6 +154,61 @@ class LightGBM_Model:
         print(results)
 
         return models, predictions, results, y_true_dict
+
+
+    def lightgbm_model_final(
+        self,
+        data: pd.DataFrame,
+        features: dict[float, list[str]],
+        TARGET: str,
+        learning_rate: dict[float, float],
+        num_estimators: dict[float, float],
+        num_leaves: dict[float, float],
+        reg_alpha: dict[float, float],
+        quantiles: list[float],
+    ) -> tuple[dict[str, lgb.LGBMRegressor], dict[str, float]]:
+        """Train a LightGBM model for each quantile and return the models.
+
+        Args:
+            data (pd.DataFrame): The data to train the models on.
+
+        Returns:
+            model (dict): A dictionary containing the trained models.
+        """
+        print("-----Train the lightgbm model-----")
+
+        data_preparer = DataPreparing()
+
+        models = {}
+
+
+        for quantile in quantiles:
+
+            data = data_preparer.create_features_iterative(data, TARGET) # Create features for the data
+
+            X_train = data[features[quantile]]
+            y_train = data[TARGET]
+
+
+            models[f"model_{quantile}"] = lgb.LGBMRegressor(
+                objective="quantile",
+                alpha=quantile,
+                n_estimators=num_estimators[quantile],
+                learning_rate=learning_rate[quantile],
+                num_leaves=num_leaves[quantile],
+                reg_alpha=reg_alpha[quantile],
+                verbose=-1,
+            )
+            models[f"model_{quantile}"].fit(
+                X_train,
+                y_train,
+                eval_metric="quantile",
+                eval_set=[(X_train, y_train)],
+            )
+
+        return models
+
+
 
     def lightgbm_model_iterative(
         self,
@@ -202,7 +267,7 @@ class LightGBM_Model:
                 test = data.iloc[test_index]
 
                 # Create features for the train set
-                train = data_preparer.create_features_iterative(train)
+                train = data_preparer.create_features_iterative(train, TARGET)
 
                 # Define the features and target for the train set
                 X_train = train[FEATURES[quantile]]
@@ -230,7 +295,7 @@ class LightGBM_Model:
                     #     lgb.early_stopping(stopping_rounds=50, verbose=False),
                     # ],
                 )
-                models[f"model_{quantile}_{split_counter}"] = model
+                models[f"model_{quantile}"] = model
 
                 # Predict the next day iteratively
                 y_pred_list = []
@@ -239,7 +304,17 @@ class LightGBM_Model:
                     test_current = test.iloc[
                         : i + 1
                     ].copy()  # Take rows from 0 to i (inclusive)
-                    test_current = data_preparer.create_features_iterative(test_current)
+
+                    # Merge the current test data with the train data to create the features
+                    test_current = pd.concat([train, test_current])
+
+                    test_current = data_preparer.create_features_iterative(test_current, TARGET)
+
+                    # Take the respective rows which are the current test data
+                    test_current = test_current.iloc[-(i+1):]
+
+
+
                     X_test_current = test_current[FEATURES[quantile]]
                     y_test_current = test_current[TARGET]
 
@@ -247,7 +322,7 @@ class LightGBM_Model:
                     y_pred_list.append(y_pred_current[-1])
                     y_true_list.append(
                         y_test_current.iloc[-1]
-                    )  # Use .iloc for single value
+                    )  
 
                 predictions[f"pred_{quantile}_{split_counter}"] = y_pred_list
                 y_true_dict[f"y_true_{split_counter}"] = np.array(y_true_list)

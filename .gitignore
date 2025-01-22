@@ -9,6 +9,7 @@ __pycache__/
 # No weather data
 utils/
 data/weather
+output/
 
 # Distribution / packaging
 .Python

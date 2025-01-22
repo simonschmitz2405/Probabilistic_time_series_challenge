@@ -1,4 +1,4 @@
-from data.DataPreparing import DataPreparing
+from processing.DataPreparing import DataPreparing
 
 import pandas as pd
 import numpy as np
@@ -10,7 +10,16 @@ from sklearn.ensemble import GradientBoostingRegressor
 
 
 class GradientBoostingRegressor_Model:
-    def gradientboostingregressor_model(self, data, FEATURES, TARGET, quantiles):
+    """Class to train a Gradient Boosting model for each quantile and return the models.
+
+    Attributes:
+        None
+
+    Functions:
+        gradientboostingregressor_model: Train a Gradient Boosting model for each quantile and return the models.
+        gradientboostingregressor_model_iterative: Train a Gradient Boosting model for each quantile and return the models.
+    """
+    def gradientboostingregressor_model(self, data, FEATURES, TARGET, learning_rate, n_estimators, quantiles, n_splits, test_size):
         """Train a Gradient Boosting model for each quantile and return the models.
 
         Args:
@@ -25,7 +34,7 @@ class GradientBoostingRegressor_Model:
         data_preparer = DataPreparing()
 
         # Creates the Time Series cross validation
-        tss = TimeSeriesSplit(n_splits=5, test_size=30, gap=0)
+        tss = TimeSeriesSplit(n_splits=n_splits, test_size=test_size, gap=0)
 
         models = {}
         predicitons = {}
@@ -46,24 +55,24 @@ class GradientBoostingRegressor_Model:
 
             split_counter = 0
             for train_index, test_index in tss.split(data_copy):
+
+                data_copy = data_preparer.create_features_iterative(data_copy, TARGET)
+
                 train = data_copy.iloc[train_index]
                 test = data_copy.iloc[test_index]
-
-                train = data_preparer.create_features(train)
-                test = data_preparer.create_features(test)
 
                 # Use mean imputation for missing values green
                 imputer = SimpleImputer(strategy='mean') 
                 train_transformed = imputer.fit_transform(train[FEATURES[quantile]])
-                test_transformed = imputer.fit_transform(test[FEATURES[quantile]])
+                test_transformed = imputer.transform(test[FEATURES[quantile]])
 
-                train[FEATURES[quantile]] = pd.DataFrame(
+                train.loc[:,FEATURES[quantile]] = pd.DataFrame(
                     train_transformed,
                     columns=FEATURES[quantile],
                     index=train.index
                 )
 
-                test[FEATURES[quantile]] = pd.DataFrame(
+                test.loc[:,FEATURES[quantile]] = pd.DataFrame(
                     test_transformed,
                     columns=FEATURES[quantile],
                     index=test.index
@@ -75,7 +84,7 @@ class GradientBoostingRegressor_Model:
                 X_test = test[FEATURES[quantile]]
                 y_test = test[TARGET]
 
-                model = GradientBoostingRegressor(loss='quantile', alpha= quantile)
+                model = GradientBoostingRegressor(loss='quantile', alpha = quantile, learning_rate = learning_rate[quantile], n_estimators = n_estimators[quantile])
                 model.fit(X_train,y_train)
                 models[f"model_{quantile}"] = model
 
@@ -126,6 +135,56 @@ class GradientBoostingRegressor_Model:
 
 
         return models, predicitons, results
+
+
+    def gradientboostingregressor_model_final(self, data, FEATURES, TARGET, learning_rate, n_estimators, quantiles):
+        """Train a Gradient Boosting model for each quantile and return the models.
+
+        Args:
+            data (pd.DataFrame): The data to train the models on.
+
+        Returns:
+            model (dict): A dictionary containing the trained models.
+        """	
+        print("-----Train the Gradient boosting regressor model-----")
+
+        # Function to get the features
+        data_preparer = DataPreparing()
+
+        models = {}
+
+
+        for quantile in quantiles:
+            data_copy = data.copy()
+
+
+
+            data_copy = data_preparer.create_features_iterative(data_copy, TARGET)
+
+
+            # Use mean imputation for missing values green
+            imputer = SimpleImputer(strategy='mean') 
+            train_transformed = imputer.fit_transform(data_copy[FEATURES[quantile]])
+
+            data.loc[:,FEATURES[quantile]] = pd.DataFrame(
+                train_transformed,
+                columns=FEATURES[quantile],
+                index=data.index
+            )
+
+
+
+            X_train = data[FEATURES[quantile]]
+            y_train = data[TARGET]
+
+
+            model = GradientBoostingRegressor(loss='quantile', alpha = quantile, learning_rate = learning_rate[quantile], n_estimators = n_estimators[quantile])
+            model.fit(X_train,y_train)
+            models[f"model_{quantile}"] = model
+
+
+
+        return models
     
 
     def gradientboostingregressor_model_iterative(self, data, FEATURES, TARGET, quantiles):
@@ -168,7 +227,7 @@ class GradientBoostingRegressor_Model:
                 train = data_copy.iloc[train_index]
                 test = data_copy.iloc[test_index]
 
-                train = data_preparer.create_features_iterative(train)
+                train = data_preparer.create_features_iterative(train, TARGET)
 
                 # Use mean imputation for missing values green
                 imputer = SimpleImputer(strategy='mean') 
@@ -194,9 +253,9 @@ class GradientBoostingRegressor_Model:
                     # Take current test data
                     test_current = test.iloc[:i+1].copy()
 
-                    # Merge the current test data with the train data to create the features
+                    # Create iterativ the features for the current test by also taking the training data
                     test_current = pd.concat([train, test_current])
-                    test_current = data_preparer.create_features_iterative(test_current)
+                    test_current = data_preparer.create_features_iterative(test_current, TARGET)
 
                     # Take the respective rows which are the current test data
                     test_current = test_current.iloc[-(i+1):]

@@ -1,0 +1,14 @@
+# Set fontsize and options
+font.size: 12
+font.family: STIXGeneral
+mathtext.fontset: stix 
+
+# Remove padding
+figure.constrained_layout.use: True
+figure.constrained_layout.h_pad: 0.5
+figure.constrained_layout.w_pad: 0.5
+figure.constrained_layout.hspace: 0.5
+figure.constrained_layout.wspace: 0.5
+
+# Change color cycle
+axes.prop_cycle: cycler('color', ['33BBEE', '0077BB' ,'009988', 'EE7733', 'CC3311', 'EE3377', 'BBBBBB'])

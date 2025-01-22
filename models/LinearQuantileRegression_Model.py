@@ -1,4 +1,4 @@
-from data.DataPreparing import DataPreparing
+from processing.DataPreparing import DataPreparing
 
 import pandas as pd
 import numpy as np
@@ -9,7 +9,16 @@ from sklearn.linear_model import QuantileRegressor
 from sklearn.impute import SimpleImputer
 
 class LinearQuantileRegression_Model:
-    def quantile_regression_model(self, data, FEATURES, TARGET, fit_intercept, alpha, quantiles):
+    """Class to train a linear quantile regression model for each quantile.
+
+    Attributes:
+        None
+
+    Functions:
+        quantile_regression_model: Train a Quantile Regressor for each quantile and return the models.
+        quantile_regression_model_iterative: Train a Quantile Regressor for each quantile and return the models.
+    """
+    def quantile_regression_model(self, data, FEATURES, TARGET, fit_intercept, alpha, quantiles, n_splits, test_size):
         """Train a Quantile Regressor for each quantile and return the models.
 
         Args:
@@ -23,7 +32,7 @@ class LinearQuantileRegression_Model:
             results (dict): A dictionary containing evaluation metrics.
         """
         # Convert the fit_intercept parameter to a boolean because of optuna hyperparameter optimization
-        print("-----Train the linear quantile regression model-----")
+        print(f"-----Train the linear quantile regression model for target {TARGET}----")
         if fit_intercept == 0:
             fit_intercept = False
         elif fit_intercept == 1:
@@ -32,7 +41,7 @@ class LinearQuantileRegression_Model:
         data_preparer = DataPreparing()
 
         # Creates the Time Series cross validation
-        tss = TimeSeriesSplit(n_splits=5, test_size=30, gap=0)
+        tss = TimeSeriesSplit(n_splits=n_splits, test_size=test_size, gap=0)
 
         models = {}
         predictions = {} # Store the predicitons for ensemble model
@@ -54,16 +63,18 @@ class LinearQuantileRegression_Model:
             split_counter = 0
             for train_index, test_index in tss.split(data_copy):
 
+                data_copy = data_preparer.create_features_iterative(data_copy, TARGET)
+
                 train = data_copy.iloc[train_index]
                 test = data_copy.iloc[test_index]
-
-                train = data_preparer.create_features(train)
-                test = data_preparer.create_features(test)
 
                 # Use mean imputation for missing values
                 imputer = SimpleImputer(strategy='mean')  
                 train_transformed= imputer.fit_transform(train[FEATURES[quantile]])
                 test_transformed = imputer.transform(test[FEATURES[quantile]])
+
+                train = train.copy()
+                test = test.copy()
 
                 train[FEATURES[quantile]] = pd.DataFrame(
                     train_transformed,
@@ -85,7 +96,7 @@ class LinearQuantileRegression_Model:
                 y_test = test[TARGET]
 
                 # Initialize and train the Quantile Regressor (train a model for each quantile)
-                model = QuantileRegressor(quantile=quantile, solver='highs', alpha=alpha[quantile], fit_intercept=fit_intercept)
+                model = QuantileRegressor(quantile=quantile, solver='highs', alpha=alpha[quantile], fit_intercept=fit_intercept) 
                 model.fit(X_train, y_train)
                 models[f"model_{quantile}"] = model
 
@@ -138,6 +149,65 @@ class LinearQuantileRegression_Model:
         print(results)
 
         return models, predictions, results
+    
+
+    def quantile_regression_model_final(self, data, FEATURES, TARGET, fit_intercept, alpha, quantiles):
+        """Train a Quantile Regressor for each quantile and return the models.
+
+        Args:
+            data (pd.DataFrame): The data to train the models on.
+            FEATURES (list): List of feature column names.
+            TARGET (str): Name of the target column.
+            quantiles (list): List of quantiles for quantile regression.
+
+        Returns:
+            models (dict): A dictionary containing the trained models.
+            results (dict): A dictionary containing evaluation metrics.
+        """
+        # Convert the fit_intercept parameter to a boolean because of optuna hyperparameter optimization
+        print(f"-----Train the linear quantile regression model for target {TARGET}----")
+        if fit_intercept == 0:
+            fit_intercept = False
+        elif fit_intercept == 1:
+            fit_intercept = True
+
+        data_preparer = DataPreparing()
+
+        models = {}
+
+
+        for quantile in quantiles:
+            data_copy = data.copy()
+
+
+
+            data_copy = data_preparer.create_features_iterative(data_copy, TARGET)
+
+
+            # Use mean imputation for missing values
+            imputer = SimpleImputer(strategy='mean')  
+            train_transformed= imputer.fit_transform(data_copy[FEATURES[quantile]])
+
+
+            data_copy[FEATURES[quantile]] = pd.DataFrame(
+                train_transformed,
+                columns=FEATURES[quantile],
+                index=data_copy.index
+            )
+
+
+            # Feature and target extraction
+            X_train = data_copy[FEATURES[quantile]]
+            y_train = data_copy[TARGET]
+
+
+            # Initialize and train the Quantile Regressor (train a model for each quantile)
+            model = QuantileRegressor(quantile=quantile, solver='highs', alpha=alpha[quantile], fit_intercept=fit_intercept) 
+            model.fit(X_train, y_train)
+            models[f"model_{quantile}"] = model
+
+
+        return models
 
     def quantile_regression_model_iterative(self, data, FEATURES, TARGET, fit_intercept, alpha, quantiles):
             """Train a Quantile Regressor for each quantile and return the models.
@@ -187,7 +257,7 @@ class LinearQuantileRegression_Model:
                     train = data_copy.iloc[train_index]
                     test = data_copy.iloc[test_index]
 
-                    train = data_preparer.create_features_iterative(train)
+                    train = data_preparer.create_features_iterative(train, TARGET)
 
                     # Use mean imputation for missing values
                     imputer = SimpleImputer(strategy='mean')  
@@ -216,7 +286,7 @@ class LinearQuantileRegression_Model:
 
                         # Merge the current test data with the train data to create the features
                         test_current = pd.concat([train, test_current])
-                        test_current = data_preparer.create_features_iterative(test_current)
+                        test_current = data_preparer.create_features_iterative(test_current, TARGET)
 
                         # Take the respective rows which are the current test data
                         test_current = test_current.iloc[-(i+1):]

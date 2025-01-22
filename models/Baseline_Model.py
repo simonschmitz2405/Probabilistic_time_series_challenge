@@ -1,10 +1,18 @@
-from data.DataPreparing import DataPreparing
+from processing.DataPreparing import DataPreparing
 import numpy as np
 from sklearn.metrics import mean_pinball_loss
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import d2_pinball_score
 
 class Baseline_Model:
+    """Baseline model to predict the future using the last 100 observations and the calculated quantiles.
+
+    Attributes:
+        None
+
+    Functions:
+        baseline_model: Baseline model that takes the last 100 observation and predicts using the calculated quantiles.
+    """
     def baseline_model(self, data, TARGET, quantiles, last_observations=100):
         """Baseline model that takes the last 100 observation and predicts using the calculated quantiles.
 
@@ -32,9 +40,9 @@ class Baseline_Model:
                 train = data.iloc[train_index]
                 test = data.iloc[test_index]
 
-                data_preparer = DataPreparing()
-                train = data_preparer.create_features(train)
-                test = data_preparer.create_features(test)
+                # data_preparer = DataPreparing()
+                # train = data_preparer.create_features(train, TARGET)
+                # test = data_preparer.create_features(test, TARGET)
 
                 y_pred = []
                 y_true = []
@@ -92,3 +100,4 @@ class Baseline_Model:
         print(results)
 
         return predictions, results
+    
