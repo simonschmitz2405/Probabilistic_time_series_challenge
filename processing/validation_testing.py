@@ -80,6 +80,7 @@ class validation_testing:
                 # Predict the future iteratively
                 forecaster_and_saver = forecasting_and_saving()
                 future = forecaster_and_saver.predict_future_iterativ_bike(test_and_train_data, validation_data, model, features, 'bike_count', [0.025, 0.25, 0.5, 0.75, 0.975], validation = True)
+                print(future)
                 future_dict[f"Future_{i+1}"] = future
 
             if selected_model == "linearquantileregression":
@@ -170,6 +171,8 @@ class validation_testing:
                         last_100_days = same_weekday_data.iloc[-100:]
                         quantile_predictions = last_100_days['bike_count'].quantile(quantile)
                         future.loc[date, f"pred_{quantile}"] = quantile_predictions
+
+                future_dict[f"Future_{i+1}"] = future
 
 
             # Store the results
