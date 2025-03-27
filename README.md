@@ -24,6 +24,7 @@ A special thank you to **Professor Dr. Fabian Krüger** and his team for organiz
 ```plaintext
 ├── evaluation/               # Contains necessary files for evaluation submission format checking over real-time forecasting.
 ├── models/                   # Implementation of various probabilistic forecasting models.
+├── processing/               # Contains scripts for retrieving and preprocessing weather data, as well as implementing the validation strategy.
 ├── Main.ipynb                # Entry-Point for Forecasting.
 ├── hyperparameter.py         # Stores all hyperparameter for each model on quantile level.
 ├── hyperparameter_optuna.py  # Performes the hyperparameter search using optuna package.
